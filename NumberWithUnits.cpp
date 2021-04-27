@@ -3,10 +3,14 @@
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
-#include "NumberWithUnits.hpp"
+#include <unordered_map>
+#include <cstdlib>
+#include "NumberWithUnits.hpp" 
+constexpr double EPS=0000.1;
+char actualChar;
 using namespace std;
-using namespace ariel;
-std::unordered_map<std::string,std::string> comp;
+namespace ariel{
+unordered_map<string,string>NumberWithUnits::comp;
 char ch;
 
 NumberWithUnits& NumberWithUnits::operator-=(const NumberWithUnits& other){
@@ -62,38 +66,11 @@ NumberWithUnits& NumberWithUnits::operator++(){
     return *this;
 }
 
-bool NumberWithUnits::operator>(const NumberWithUnits& other)const{
-    double error=-1;
-    double res1=this->conv(other.unit);
-    double res2=other.conv(this->unit);
-    bool flag=false;
-    if((res1==res2)&&(res1==error)){throw out_of_range{"Units do not match"};}
-    if(res1!=error){flag=(this->num_of_unit>other.num_of_unit*res1);}
-    else if(res2!=error){flag=(this->num_of_unit*res2>other.num_of_unit);}
-    return flag;
-}
+bool NumberWithUnits::operator>(const NumberWithUnits& other)const{return (this->eql(other)>0);}
 
-bool NumberWithUnits::operator>=(const NumberWithUnits& other)  const {
-    double error=-1;
-    double res1=this->conv(other.unit);
-    double res2=other.conv(this->unit);
-    bool flag=false;
-    if((res1==res2)&&(res1==error)){throw("Units do not match");}
-    if(res1!=error){flag = (this->num_of_unit>=other.num_of_unit*res1);}
-    else if(res2!=error){flag = (this->num_of_unit*res2>=other.num_of_unit);}
-    return flag;
-}
+bool NumberWithUnits::operator>=(const NumberWithUnits& other)  const {return (this->eql(other)>=0);}
 
-bool NumberWithUnits::operator==(const NumberWithUnits& other)const{
-    double error=-1;
-    bool flag=false;
-    double res1=this->conv(other.unit);
-    double res2=other.conv(this->unit);
-    if((res1==res2)&&(res1==error)){throw out_of_range{"Units do not match"};}
-    if(res1!=error){flag = (this->num_of_unit==other.num_of_unit*res1);}
-    else if(res2!=error){flag = (this->num_of_unit*res2==other.num_of_unit);}
-    return flag;
-}
+bool NumberWithUnits::operator==(const NumberWithUnits& other)const{return (abs(this->eql(other))<EPS);}
 
 bool NumberWithUnits::operator!=(const NumberWithUnits& other)const{return !(*this==other);}
 
@@ -101,7 +78,7 @@ bool NumberWithUnits::operator<(const NumberWithUnits& other)const{return!(*this
 
 bool NumberWithUnits::operator<=(const NumberWithUnits& other)const{return!(*this>other);}
 
-NumberWithUnits ariel::operator-(const NumberWithUnits& other1,const NumberWithUnits& other2){
+NumberWithUnits operator-(const NumberWithUnits& other1,const NumberWithUnits& other2){
     double error=-1;
     double res=-1;
     if((res=other2.conv(other1.unit))>error){
@@ -110,35 +87,69 @@ NumberWithUnits ariel::operator-(const NumberWithUnits& other1,const NumberWithU
     if((res=other1.conv(other2.unit))>error){
         return (NumberWithUnits(other1.num_of_unit-other2.num_of_unit*res,other1.unit));
     }
-    return (NumberWithUnits(other1.num_of_unit-other2.num_of_unit*res,other1.unit));
-
+    throw out_of_range{"Units do not match"};
 
 }
 
-NumberWithUnits ariel::operator +(const NumberWithUnits& other1,const NumberWithUnits& other2){
+NumberWithUnits operator +(const NumberWithUnits& other1,const NumberWithUnits& other2){
     double error=-1;
     double res=-1;
-    if((res=other2.conv(other1.unit))>error){
-        return (NumberWithUnits(other1.num_of_unit+other2.num_of_unit/res,other1.unit));
+    double num=other2.num_of_unit;
+    string u=other2.unit;
+    string spilt_char=":";
+    while(NumberWithUnits::comp[u]!="flag"){
+        unsigned long pos1=(unsigned long)NumberWithUnits::comp[u].find(spilt_char);                    
+        num*=stod(NumberWithUnits::comp[u].substr(0,pos1));
+        u=NumberWithUnits::comp[u].substr(pos1+1);      
     }
-    if((res=other1.conv(other2.unit))>error){
-        return (NumberWithUnits(other1.num_of_unit+other2.num_of_unit*res,other1.unit));
+    NumberWithUnits other3{num,u};
+    if((res=other3.conv(other1.unit))>error){
+        return (NumberWithUnits(other1.num_of_unit+other3.num_of_unit/res,other1.unit));
     }
-    throw std::out_of_range{"Units do not match"};
+    // if((res=other1.conv(other.unit))>error){
+    //     return (NumberWithUnits(other1.num_of_unit+other2.num_of_unit*res,other1.unit));
+    // }
+    throw out_of_range{"Units do not match"};
     
 
 }
 
-NumberWithUnits ariel::operator *(double num,const NumberWithUnits& unit){return  NumberWithUnits(unit.num_of_unit*num,unit.unit);}
+NumberWithUnits operator *(double num,const NumberWithUnits& unit){return  NumberWithUnits(unit.num_of_unit*num,unit.unit);}
 
-NumberWithUnits ariel::operator *(const NumberWithUnits& unit,double num){return (num*unit);}
+NumberWithUnits operator *(const NumberWithUnits& unit,double num){return (num*unit);}
 
-ostream& ariel::operator<< (std::ostream& os, const NumberWithUnits & unit){
+ostream& operator<< (std::ostream& os, const NumberWithUnits & unit){
     return (os<<unit.num_of_unit<<"["<<unit.unit<<"]");
 }
-istream& ariel::operator>> (istream& input, NumberWithUnits& other) {
-    return (input >> other.num_of_unit >> ch >> other.unit>> ch);
+static istream& getAndCheckNextCharIs(istream& input, char expectedChar) {
+    input >> actualChar;
+    if (!input) {return input;}
+    if (actualChar!=expectedChar) {
+        // failbit is for format error
+        input.setstate(ios::failbit);
+    }
+    return input;
+}
+
+istream& operator>> (istream& input, NumberWithUnits& other) {
+    double num = 0;
+    string unit;
+    ios::pos_type startPosition = input.tellg();
+    if ((!(input >> num))||(!getAndCheckNextCharIs(input,'['))||(!(input >> unit))) {
+        auto errorState = input.rdstate(); // remember error state
+        input.clear(); // clear error so seekg will work
+        input.seekg(startPosition); // rewind
+        input.clear(errorState); // set back the error flag
+    } else {
+        if(unit.at(unit.length()-1)==']'){unit=unit.substr(0,unit.length()-1);}
+        else{getAndCheckNextCharIs(input,']');}
+        if(NumberWithUnits::comp.find(unit)==NumberWithUnits::comp.end()){throw out_of_range{"Units do not match"};}
+        other.unit = unit;
+        other.num_of_unit = num;
+    }
+
+    return input;
 }
 
 
- 
+}
